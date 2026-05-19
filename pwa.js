@@ -81,8 +81,11 @@
       display: none;
       align-items: center; gap: 8px;
       cursor: pointer;
+      transition: opacity 400ms ease, transform 400ms ease;
+      opacity: 1;
     }
     .mnc-photos-fab.show { display: inline-flex; }
+    .mnc-photos-fab.hiding { opacity: 0; transform: translateY(20px); pointer-events: none; }
     .mnc-photos-fab .dot {
       width: 8px; height: 8px; border-radius: 50%;
       background: #1373E6;
@@ -223,6 +226,21 @@
     if (sub != null)  fabSmall.textContent = sub;
   }
 
+  function showFabVisible() {
+    fab.classList.add('show');
+    fab.classList.remove('hiding');
+  }
+
+  function hideFab(animated) {
+    if (animated) {
+      fab.classList.add('hiding');
+      setTimeout(() => fab.classList.remove('show'), 450);
+    } else {
+      fab.classList.remove('show');
+      fab.classList.remove('hiding');
+    }
+  }
+
   function getAllPhotos() {
     const list = window.__MNC_ALL_PHOTOS;
     if (Array.isArray(list) && list.length) return list;
@@ -235,27 +253,29 @@
     return [...found];
   }
 
-  function showFab() {
+  // L'utente può forzare il refresh aggiungendo ?refreshPhotos all'URL
+  const forceRefresh = /[?&]refreshPhotos\b/.test(location.search);
+
+  function checkCacheStatus() {
     const photos = getAllPhotos();
     if (!photos.length) return;
-    fab.classList.add('show');
-    // Verifica stato cache
+    // Chiedi al SW lo stato della cache foto. La risposta arriva via messaggio.
     if (navigator.serviceWorker && navigator.serviceWorker.controller) {
       navigator.serviceWorker.controller.postMessage({ type: 'PHOTOS_STATUS' });
     }
   }
 
-  // Tenta di mostrarlo dopo che app.js ha completato il render iniziale
+  // Tenta di controllare lo stato cache dopo che app.js ha completato il render
   let fabAttempts = 0;
-  function tryShowFab() {
+  function tryCheckCache() {
     if (window.__MNC_ALL_PHOTOS || fabAttempts > 20) {
-      showFab();
+      checkCacheStatus();
       return;
     }
     fabAttempts++;
-    setTimeout(tryShowFab, 250);
+    setTimeout(tryCheckCache, 250);
   }
-  window.addEventListener('load', () => setTimeout(tryShowFab, 800));
+  window.addEventListener('load', () => setTimeout(tryCheckCache, 800));
 
   fab.addEventListener('click', () => {
     if (fab.classList.contains('loading')) return;
@@ -280,13 +300,27 @@
       if (msg.type === 'CACHE_PROGRESS') {
         const pct = Math.round((msg.done / msg.total) * 100);
         setFabState('loading', 'Scarico…', pct + '%');
+        showFabVisible();
       } else if (msg.type === 'CACHE_DONE') {
         setFabState('done', 'Foto in cache', msg.ok + '/' + msg.total);
         store.set('mnc_photos_cached', String(msg.ok));
+        showFabVisible();
+        // Dopo 4 secondi, nascondi con fade
+        setTimeout(() => hideFab(true), 4000);
       } else if (msg.type === 'PHOTOS_STATUS_REPLY') {
-        if (msg.count > 0) setFabState('done', 'Foto in cache', String(msg.count));
+        // Logica chiave: mostra il bottone solo se la cache è vuota,
+        // o se l'utente ha forzato il refresh con ?refreshPhotos
+        if (msg.count > 0 && !forceRefresh) {
+          // Foto già scaricate: bottone NASCOSTO, non rompe la UI
+          hideFab(false);
+        } else {
+          // Foto mancanti (primo setup) o refresh forzato: mostra il bottone
+          setFabState(null, 'Foto offline', msg.count > 0 ? 'aggiorna' : '');
+          showFabVisible();
+        }
       } else if (msg.type === 'CLEAR_PHOTOS_DONE') {
         setFabState(null, 'Foto offline', '');
+        showFabVisible();
       }
     });
   }

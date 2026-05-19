@@ -18,7 +18,7 @@
  * Versioning: bump CACHE_VERSION quando cambi shell/CSS/JS per forzare update.
  * ========================================================================== */
 
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const SHELL_CACHE   = `minorca-shell-${CACHE_VERSION}`;
 const PHOTOS_CACHE  = `minorca-photos-${CACHE_VERSION}`;
 const FONTS_CACHE   = `minorca-fonts-${CACHE_VERSION}`;
